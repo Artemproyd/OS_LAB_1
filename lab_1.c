@@ -7,7 +7,7 @@
 typedef struct {
     pthread_mutex_t mutex; // Мьютекс для синхронизации
     pthread_cond_t cond; // Условная переменная для ожидания/уведомления
-    int ready;   // Флаг готовности данных
+    int ret;   // Флаг завершения
     int data;  // Последнее переданное число
     int num_numbers;  // Количество чисел, которые поставщик должен передать
 } SharedResource;
@@ -23,12 +23,12 @@ void* supplier(void* arg) {
 
         pthread_mutex_lock(&resource->mutex);
 
-        if (resource->ready) { // Если предыдущее число ещё не обработано
+        if (resource->ret) { // Если предыдущее число ещё не обработано
             printf("Sender: Error! Previous number is not processed yet.\n");
         } else {
         	resource->data = rand() % 111 + 1;
 			printf("Supplier sent: %d\n", resource->data);
-            resource->ready = 1;       // Устанавливаем флаг готовности
+            resource->ret = 1;       // Устанавливаем флаг готовности
             pthread_cond_signal(&resource->cond); // Уведомляем поток-получатель
         }
 
@@ -47,12 +47,12 @@ void* consumer(void* arg) {
         pthread_mutex_lock(&resource->mutex);
 
         // Ожидание уведомления о новых данных
-        while (!resource->ready) {
+        while (!resource->ret) {
             pthread_cond_wait(&resource->cond, &resource->mutex);
         }
 
         // Проверяем сигнал завершения
-        if (resource->ready == -1) {
+        if (resource->ret == -1) {
             pthread_mutex_unlock(&resource->mutex);
             break;
         }
@@ -61,7 +61,7 @@ void* consumer(void* arg) {
         printf("Consumer received: %d\n", resource->data);
 
         // Сбрасываем флаг готовности
-        resource->ready = 0;
+        resource->ret = 0;
 
         // Освобождение мьютекса
         pthread_mutex_unlock(&resource->mutex);
