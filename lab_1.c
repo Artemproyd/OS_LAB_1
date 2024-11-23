@@ -5,8 +5,9 @@
 #include <unistd.h>
 
 typedef struct {
-    pthread_mutex_t mutex;
-    pthread_cond_t cond;
+    pthread_mutex_t mutex; // Мьютекс для синхронизации
+    pthread_cond_t cond; // Условная переменная для ожидания/уведомления
+    int ready;   // Флаг готовности данных
     int data;  // Последнее переданное число
     int num_numbers;  // Количество чисел, которые поставщик должен передать
 } SharedResource;
@@ -17,40 +18,50 @@ void* supplier(void* arg) {
 
     srand(time(NULL));
 
-    for (int i = 0; i < resource->num_numbers; i++) {
+    for(int i = 0; i < resource->num_numbers; i++) {
         sleep(1); // Пауза между отправками
 
-        // Генерация случайного числа
-        resource->data = rand() % 111 + 1;  // Генерация числа от 0 до 99
-
-        // Блокировка мьютекса
         pthread_mutex_lock(&resource->mutex);
 
-        // Уведомление потребителя о новых данных
-        pthread_cond_signal(&resource->cond);
+        if (resource->ready) { // Если предыдущее число ещё не обработано
+            printf("Sender: Error! Previous number is not processed yet.\n");
+        } else {
+        	resource->data = rand() % 111 + 1;
+			printf("Supplier sent: %d\n", resource->data);
+            resource->ready = 1;       // Устанавливаем флаг готовности
+            pthread_cond_signal(&resource->cond); // Уведомляем поток-получатель
+        }
 
-        // Освобождение мьютекса
         pthread_mutex_unlock(&resource->mutex);
 
-        printf("Supplier sent: %d\n", resource->data);
     }
 
-    // Завершаем работу потока поставщика
     return NULL;
 }
 
 // Функция потребителя
 void* consumer(void* arg) {
     SharedResource* resource = (SharedResource*)arg;
-    for (int i = 0; i < resource->num_numbers; ++i) {
+    for(int i = 0; i < resource->num_numbers; ++i) {
         // Блокировка мьютекса
         pthread_mutex_lock(&resource->mutex);
 
         // Ожидание уведомления о новых данных
-        pthread_cond_wait(&resource->cond, &resource->mutex);
+        while (!resource->ready) {
+            pthread_cond_wait(&resource->cond, &resource->mutex);
+        }
+
+        // Проверяем сигнал завершения
+        if (resource->ready == -1) {
+            pthread_mutex_unlock(&resource->mutex);
+            break;
+        }
 
         // Обработка данных
         printf("Consumer received: %d\n", resource->data);
+
+        // Сбрасываем флаг готовности
+        resource->ready = 0;
 
         // Освобождение мьютекса
         pthread_mutex_unlock(&resource->mutex);
@@ -60,7 +71,7 @@ void* consumer(void* arg) {
 
 int main() {
     pthread_t supplier_thread, consumer_thread;
-    SharedResource resource = {PTHREAD_MUTEX_INITIALIZER, PTHREAD_COND_INITIALIZER, 0, 0};
+    SharedResource resource = {PTHREAD_MUTEX_INITIALIZER, PTHREAD_COND_INITIALIZER, 0, 0, 0};
 
     int num_numbers;
 
