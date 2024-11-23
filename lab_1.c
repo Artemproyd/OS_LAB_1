@@ -8,7 +8,6 @@ typedef struct {
     pthread_mutex_t mutex;
     pthread_cond_t cond;
     int data;  // Последнее переданное число
-    int ready;  // Флаг, показывающий, что данные готовы для обработки
     int num_numbers;  // Количество чисел, которые поставщик должен передать
 } SharedResource;
 
@@ -16,19 +15,18 @@ typedef struct {
 void* supplier(void* arg) {
     SharedResource* resource = (SharedResource*)arg;
 
-    srand(time(NULL));  
+    srand(time(NULL));
 
     for (int i = 0; i < resource->num_numbers; i++) {
         sleep(1); // Пауза между отправками
 
         // Генерация случайного числа
-        resource->data = rand() % 100;  // Генерация числа от 0 до 99
+        resource->data = rand() % 111 + 1;  // Генерация числа от 0 до 99
 
         // Блокировка мьютекса
         pthread_mutex_lock(&resource->mutex);
 
         // Уведомление потребителя о новых данных
-        resource->ready = 1;
         pthread_cond_signal(&resource->cond);
 
         // Освобождение мьютекса
@@ -49,15 +47,10 @@ void* consumer(void* arg) {
         pthread_mutex_lock(&resource->mutex);
 
         // Ожидание уведомления о новых данных
-        while (resource->ready == 0) {
-            pthread_cond_wait(&resource->cond, &resource->mutex);
-        }
+        pthread_cond_wait(&resource->cond, &resource->mutex);
 
         // Обработка данных
         printf("Consumer received: %d\n", resource->data);
-
-        // Сброс флага
-        resource->ready = 0;
 
         // Освобождение мьютекса
         pthread_mutex_unlock(&resource->mutex);
@@ -67,7 +60,7 @@ void* consumer(void* arg) {
 
 int main() {
     pthread_t supplier_thread, consumer_thread;
-    SharedResource resource = {PTHREAD_MUTEX_INITIALIZER, PTHREAD_COND_INITIALIZER, 0, 0, 0};
+    SharedResource resource = {PTHREAD_MUTEX_INITIALIZER, PTHREAD_COND_INITIALIZER, 0, 0};
 
     int num_numbers;
 
@@ -76,10 +69,10 @@ int main() {
 
     if (num_numbers <= 0) {
         printf("Invalid number. Exiting...\n");
-        return -1; 
+        return -1;
     }
 
-    resource.num_numbers = num_numbers; 
+    resource.num_numbers = num_numbers;
 
     // Создание потока поставщика
     pthread_create(&supplier_thread, NULL, supplier, (void*)&resource);
@@ -89,7 +82,7 @@ int main() {
 
     // Ожидание завершения потоков
     pthread_join(supplier_thread, NULL);
-    pthread_join(consumer_thread, NULL);  
+    pthread_join(consumer_thread, NULL);
 
     printf("All numbers have been processed. Press Enter to exit.\n");
     getchar();
