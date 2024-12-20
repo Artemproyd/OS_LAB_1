@@ -8,28 +8,34 @@
 
 static struct proc_dir_entry *our_proc_file = NULL;
 
+// Статические переменные для хранения текущих чисел Фибоначчи
+static unsigned long fib1 = 0, fib2 = 1;
+
 // Функция чтения из файла /proc/tsu
 static ssize_t procfile_read(struct file *file_pointer, char __user *buffer,
                              size_t buffer_length, loff_t *offset) {
-    char s[] = "Tomsk\n";
-    size_t len = sizeof(s) - 1;
+    char output[64];
+    size_t len;
 
-    // Если смещение больше длины строки, завершаем чтение
-    if (*offset >= len)
+    // Если смещение больше 0, завершаем чтение (поддержка single-read)
+    if (*offset > 0)
         return 0;
 
-    // Убедимся, что пользовательский буфер достаточно большой
-    if (buffer_length < len)
-        return -EINVAL;
+    // Формируем строку с текущими числами Фибоначчи
+    len = snprintf(output, sizeof(output), "%lu %lu\n", fib1, fib2);
 
     // Копируем данные в пользовательский буфер
-    if (copy_to_user(buffer, s, len)) {
+    if (copy_to_user(buffer, output, len)) {
         return -EFAULT;
     }
 
+
     *offset += len; // Обновляем смещение
 
-    pr_info("procfile_read: /proc/%s read\n", PROCFS_NAME);
+    pr_info("procfile_read: /proc/%s read, Fibonacci: %lu %lu\n", PROCFS_NAME, fib1, fib2);
+
+    fib1 += fib2;
+    fib2 += fib1;
     return len;
 }
 
@@ -67,5 +73,16 @@ module_exit(procfs1_exit);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Your Name");
-MODULE_DESCRIPTION("Simple Linux Kernel Module with /proc interface");
+MODULE_DESCRIPTION("Fibonacci Sequence Linux Kernel Module with /proc interface");
 
+
+/*
+
+make
+sudo insmod linux_proc_cat
+/proc/tsu
+sudo rmmod linux_proc_module
+sudo dmesg | grep "/proc/tsu"
+make clean
+
+*/
